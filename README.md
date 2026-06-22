@@ -56,7 +56,7 @@ docker-compose up -d --build
 
 This brings up:
 1.  **QA Application Portal** (`qa_automation_agent_web`) on [http://localhost:3000](http://localhost:3000)
-2.  **RabbitMQ Management Portal** (`rabbitmq-node1`) on [http://localhost:15672](http://localhost:15672) (User: `admin` / Password: `admin_secret` by default)
+2.  **RabbitMQ Management Portal** (`rabbitmq`) on [http://localhost:15672](http://localhost:15672) (User: `admin` / Password: `admin_secret` by default)
 
 To tear down the stack and keep database volumes intact:
 ```bash

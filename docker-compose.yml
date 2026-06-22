@@ -1,4 +1,4 @@
-# Docker Compose for QA Automation and Local RabbitMQ Cluster
+# Docker Compose for QA Automation and Local RabbitMQ
 version: '3.8'
 
 services:
@@ -14,45 +14,28 @@ services:
     environment:
       - NODE_ENV=production
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - RABBITMQ_URL=amqp://admin:admin_secret@rabbitmq-node1:5672
+      - RABBITMQ_URL=amqp://admin:admin_secret@rabbitmq:5672
     volumes:
       - sqlite-data:/app/data
     depends_on:
-      - rabbitmq-node1
+      - rabbitmq
     restart: unless-stopped
 
-  # RabbitMQ Broker Node 1 (Master)
-  rabbitmq-node1:
+  # RabbitMQ Broker (Single Node)
+  rabbitmq:
     image: rabbitmq:3.11-management
-    container_name: rabbitmq-node1
-    hostname: rabbitmq-node1
+    container_name: rabbitmq
+    hostname: rabbitmq
     ports:
       - "5672:5672"   # AMQP protocol port
       - "15672:15672" # Management Plugin UI
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=admin_secret
-      - RABBITMQ_ERLANG_COOKIE=QA_CLUSTER_FEDERATION_COOKIE
     volumes:
-      - rabbitmq-node1-data:/var/lib/rabbitmq
+      - rabbitmq-data:/var/lib/rabbitmq
     restart: unless-stopped
-
-  # RabbitMQ Cluster Worker Node 2 (Clustered backup)
-  rabbitmq-node2:
-    image: rabbitmq:3.11-management
-    container_name: rabbitmq-node2
-    hostname: rabbitmq-node2
-    ports:
-      - "5673:5672"
-    environment:
-      - RABBITMQ_ERLANG_COOKIE=QA_CLUSTER_FEDERATION_COOKIE
-    volumes:
-      - rabbitmq-node2-data:/var/lib/rabbitmq
-    restart: unless-stopped
-    depends_on:
-      - rabbitmq-node1
 
 volumes:
   sqlite-data:
-  rabbitmq-node1-data:
-  rabbitmq-node2-data:
+  rabbitmq-data:
