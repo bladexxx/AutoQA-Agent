@@ -15,6 +15,10 @@ services:
       - NODE_ENV=production
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - RABBITMQ_URL=amqp://admin:admin_secret@rabbitmq:5672
+      - AI_PROVIDER=${AI_PROVIDER}
+      - OPENAI_API_BASE=${OPENAI_API_BASE}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
     volumes:
       - sqlite-data:/app/data
     depends_on:
