@@ -58,14 +58,22 @@ async function runAIRequest(prompt: string, responseMimeType: 'application/json'
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const payload = {
+    const isReasoningModel = model.toLowerCase().includes('o1') || 
+                             model.toLowerCase().includes('o3') || 
+                             model.toLowerCase().includes('o4') || 
+                             model.toLowerCase().startsWith('o-');
+
+    const payload: any = {
       model: model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
       response_format: responseMimeType === 'application/json' ? { type: 'json_object' } : undefined
     };
 
-    console.log(`[AI ROUTING] Delegating to ${provider} API at ${url}. Model: ${model}`);
+    if (!isReasoningModel) {
+      payload.temperature = 0.3;
+    }
+
+    console.log(`[AI ROUTING] Delegating to ${provider} API at ${url}. Model: ${model}, isReasoning: ${isReasoningModel}`);
     
     // Node.js v18 has native fetch built-in
     const res = await fetch(url, {
