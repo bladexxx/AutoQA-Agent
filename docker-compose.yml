@@ -27,8 +27,8 @@ services:
     container_name: rabbitmq
     hostname: rabbitmq
     ports:
-      - "5672:5672"   # AMQP protocol port
-      - "15672:15672" # Management Plugin UI
+      - "5674:5672"   # Map host 5674 to container 5672 (avoid conflict)
+      - "15674:15672" # Map host 15674 to container 15672
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=admin_secret
