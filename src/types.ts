@@ -19,7 +19,9 @@ export interface TestSuite {
   description: string;
   targetUrl: string;
   category: 'smoke' | 'regression' | 'performance' | 'security' | 'custom';
-  script: string;
+  script: string; // Used for spec (Gherkin/Markdown)
+  spec?: string;  // Explicit spec string
+  actionIr?: string; // Serialized Action IR schema JSON
   createdAt: string;
 }
 
@@ -37,6 +39,8 @@ export interface TestSession {
   amqpCallbackStatus: 'idle' | 'published' | 'failed' | 'skipped';
   steps: TestStep[];
   logs: TestLog[];
+  actionIr?: string; // Serialized Action IR schema executed
+  analysis?: string; // Serialized Failure Analyticals JSON if failed
 }
 
 export interface WorkerNode {

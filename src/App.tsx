@@ -75,6 +75,10 @@ export default function App() {
   const [isDryRunning, setIsDryRunning] = useState(false);
 
   // Connection validation states
+  const [explorerUrl, setExplorerUrl] = useState('https://store.demo.org/cart');
+  const [isExploring, setIsExploring] = useState(false);
+  const [explorerResult, setExplorerResult] = useState<{ routes: any[], elements: any[], flows: any[] } | null>(null);
+
   const [testAmqpUrl, setTestAmqpUrl] = useState('amqp://admin:admin_secret@localhost:5672');
   const [testAmqpStatus, setTestAmqpStatus] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
   const [testingConnection, setTestingConnection] = useState(false);
@@ -285,17 +289,17 @@ export default function App() {
 
   const validateWithAI = async () => {
     if (!suiteScript) {
-      alert('Please write or generate a script to validate first.');
+      alert('Please write active Gherkin Feature Specifications first.');
       return;
     }
     setIsValidatingScript(true);
     setValidationResult(null);
     try {
-      const response = await fetch('/api/ai/validate-script', {
+      const response = await fetch('/api/ai/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          script: suiteScript,
+          spec: suiteScript,
           targetUrl: suiteUrl,
           aiConfig: {
             provider: aiProvider,
@@ -306,20 +310,82 @@ export default function App() {
         })
       });
       const data = await response.json();
-      setValidationResult({
-        valid: data.valid,
-        errors: data.errors || [],
-        warnings: data.warnings || []
-      });
+      if (data.error) {
+        setValidationResult({
+          valid: false,
+          errors: [data.error],
+          warnings: []
+        });
+      } else {
+        setValidationResult({
+          valid: true,
+          errors: [],
+          warnings: [
+            "Brain Planner Mode: Gherkin specified compiles perfectly to Playwright Action IR (Layer 3)!",
+            JSON.stringify(data, null, 2)
+          ]
+        });
+      }
     } catch (err: any) {
-      console.error('AI validate error:', err);
+      console.error('Planner compiler compile error:', err);
       setValidationResult({
         valid: false,
-        errors: ['Network failure: Unable to connect with the AI validation endpoint.'],
+        errors: [`Planner compilation error: ${err.message}`],
         warnings: []
       });
     } finally {
       setIsValidatingScript(false);
+    }
+  };
+
+  const applyAdvisorPatch = async (sessionId: string, proposedPatch: any) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/apply-patch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposedPatch })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        alert('Healed & Patched!\nThe Gherkin specifications has been auto-healed in persistent SQlite repository!\nYou can now trigger this test again and it will PASS.');
+        loadSuites();
+        loadSessions();
+        setRunningSession(null);
+      } else {
+        alert('Failed to apply: ' + data.error);
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const exploreTargetSite = async () => {
+    if (!explorerUrl) {
+      alert('Please specify a valid URL address.');
+      return;
+    }
+    setIsExploring(true);
+    setExplorerResult(null);
+    try {
+      const res = await fetch('/api/ai/explore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetUrl: explorerUrl,
+          aiConfig: {
+            provider: aiProvider,
+            apiKey: aiApiKey,
+            apiBase: aiApiBase,
+            model: aiModel
+          }
+        })
+      });
+      const data = await res.json();
+      setExplorerResult(data);
+    } catch (err: any) {
+      alert('agent-browser Explorer failed: ' + err.message);
+    } finally {
+      setIsExploring(false);
     }
   };
 
@@ -740,64 +806,124 @@ export default function App() {
                             exit={{ opacity: 0 }}
                             className="absolute inset-0 flex flex-col p-4 overflow-y-auto"
                           >
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
-                              
-                              {/* Sequence details list */}
-                              <div className="space-y-2 overflow-y-auto pr-1">
-                                <span className="text-[9px] text-gray-500 font-mono uppercase block tracking-wider">Step Action Sequence</span>
-                                <div className="space-y-1.5">
-                                  {runningSession.steps.map((step, idx) => (
-                                    <div 
-                                      key={idx}
-                                      className={`p-2 rounded border text-[11px] font-mono flex items-center justify-between transition-all ${
-                                        step.status === 'running' 
-                                          ? 'bg-blue-950/20 border-blue-500 text-blue-300' 
-                                          : step.status === 'passed'
-                                          ? 'bg-emerald-950/10 border-emerald-950/40 text-emerald-400'
-                                          : 'bg-rose-950/10 border-rose-950/40 text-rose-400'
-                                      }`}
-                                    >
-                                      <div className="truncate flex items-center gap-1.5">
-                                        <span className="text-gray-500">{step.stepIndex}.</span>
-                                        <span className="uppercase font-semibold">{step.action}</span>
-                                        {step.selector && <span className="text-gray-400">({step.selector})</span>}
-                                        {step.value && <span className="text-gray-300">"{step.value}"</span>}
+                            {(() => {
+                              let parsedAnalysis: any = null;
+                              if (runningSession && runningSession.analysis) {
+                                try {
+                                  parsedAnalysis = typeof runningSession.analysis === 'string'
+                                    ? JSON.parse(runningSession.analysis)
+                                    : runningSession.analysis;
+                                } catch (err) {
+                                  console.error('Failed to parse session analysis block:', err);
+                                }
+                              }
+                              return (
+                                <>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+                                    
+                                    {/* Sequence details list */}
+                                    <div className="space-y-2 overflow-y-auto pr-1">
+                                      <span className="text-[9px] text-gray-500 font-mono uppercase block tracking-wider">Step Action Sequence</span>
+                                      <div className="space-y-1.5">
+                                        {runningSession.steps.map((step, idx) => (
+                                          <div 
+                                            key={idx}
+                                            className={`p-2 rounded border text-[11px] font-mono flex items-center justify-between transition-all ${
+                                              step.status === 'running' 
+                                                ? 'bg-blue-950/20 border-blue-500 text-blue-300' 
+                                                : step.status === 'passed'
+                                                ? 'bg-emerald-950/10 border-emerald-950/40 text-emerald-400'
+                                                : 'bg-rose-950/10 border-rose-950/40 text-rose-400'
+                                            }`}
+                                          >
+                                            <div className="truncate flex items-center gap-1.5">
+                                              <span className="text-gray-500">{step.stepIndex}.</span>
+                                              <span className="uppercase font-semibold">{step.action}</span>
+                                              {step.selector && <span className="text-gray-400">({step.selector})</span>}
+                                              {step.value && <span className="text-gray-300">"{step.value}"</span>}
+                                            </div>
+                                            <span className="text-xs">
+                                              {step.status === 'running' && '●'}
+                                              {step.status === 'passed' && '✓'}
+                                              {step.status === 'failed' && '✗'}
+                                            </span>
+                                          </div>
+                                        ))}
                                       </div>
-                                      <span className="text-xs">
-                                        {step.status === 'running' && '●'}
-                                        {step.status === 'passed' && '✓'}
-                                        {step.status === 'failed' && '✗'}
-                                      </span>
                                     </div>
-                                  ))}
-                                </div>
-                              </div>
 
-                              {/* Target GUI Render box */}
-                              <div className="bg-black/80 rounded-lg p-4 border border-white/5 flex flex-col items-center justify-center text-center relative">
-                                <span className="absolute top-2 left-2 text-[8px] font-mono text-gray-500 tracking-wider">BROWSER VIEWPORT</span>
-                                
-                                {runningSession.status === 'running' ? (
-                                  <div className="space-y-2">
-                                    <RefreshCw className="w-5 h-5 text-blue-400 animate-spin mx-auto" />
-                                    <span className="text-[10px] text-gray-400 font-mono block">Simulating micro actions...</span>
-                                  </div>
-                                ) : runningSession.status === 'passed' ? (
-                                  <div className="space-y-1.5 text-center">
-                                    <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto" />
-                                    <p className="text-xs font-semibold text-white uppercase font-mono tracking-wide">Flow Evaluated</p>
-                                    <p className="text-[9px] text-gray-400 font-mono">Assertion complete. Callback dispatched to RabbitMQ broker.</p>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-1.5 text-center">
-                                    <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto animate-bounce" />
-                                    <p className="text-xs font-semibold text-rose-400 uppercase font-mono tracking-wide">Test Exception</p>
-                                    <p className="text-[9px] text-gray-400 font-mono line-clamp-2">{runningSession.failureReason || 'Selector rule mismatched target node.'}</p>
-                                  </div>
-                                )}
-                              </div>
+                                    {/* Target GUI Render box */}
+                                    <div className="bg-black/80 rounded-lg p-4 border border-white/5 flex flex-col items-center justify-center text-center relative">
+                                      <span className="absolute top-2 left-2 text-[8px] font-mono text-gray-500 tracking-wider">BROWSER VIEWPORT</span>
+                                      
+                                      {runningSession.status === 'running' ? (
+                                        <div className="space-y-2">
+                                          <RefreshCw className="w-5 h-5 text-blue-400 animate-spin mx-auto" />
+                                          <span className="text-[10px] text-gray-400 font-mono block">Simulating micro actions...</span>
+                                        </div>
+                                      ) : runningSession.status === 'passed' ? (
+                                        <div className="space-y-1.5 text-center">
+                                          <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto" />
+                                          <p className="text-xs font-semibold text-white uppercase font-mono tracking-wide">Flow Evaluated</p>
+                                          <p className="text-[9px] text-gray-400 font-mono">Assertion complete. Callback dispatched to RabbitMQ broker.</p>
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-1.5 text-center">
+                                          <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto animate-bounce" />
+                                          <p className="text-xs font-semibold text-rose-400 uppercase font-mono tracking-wide">Test Exception</p>
+                                          <p className="text-[9px] text-gray-400 font-mono line-clamp-2">{runningSession.failureReason || 'Selector rule mismatched target node.'}</p>
+                                        </div>
+                                      )}
+                                    </div>
 
-                            </div>
+                                  </div>
+
+                                  {/* Dynamic advisor segment */}
+                                  {parsedAnalysis && (
+                                    <div className="mt-4 bg-rose-950/20 border border-rose-500/20 rounded-xl p-4 space-y-3 text-left animate-fade-in shrink-0">
+                                      <div className="flex items-center gap-2 text-rose-450 border-b border-rose-500/10 pb-2">
+                                        <AlertTriangle className="w-4 h-4 text-rose-400 animate-bounce" />
+                                        <span className="text-xs uppercase tracking-wider font-semibold font-mono">Self-Healing Failure Advisor (Section 8)</span>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                                        <div className="space-y-1 bg-black/40 p-3 rounded border border-white/5">
+                                          <span className="text-[10px] text-gray-500 uppercase block">AI Root Cause Analysis</span>
+                                          <p className="text-gray-300 leading-normal text-[11px]">{parsedAnalysis.rootCause || 'Mismatched button descriptor on target SPA form.'}</p>
+                                        </div>
+                                        <div className="space-y-1 bg-black/40 p-3 rounded border border-white/5">
+                                          <span className="text-[10px] text-gray-500 uppercase block">Suggested Playwright Locator Selector</span>
+                                          <code className="text-emerald-400 block text-[11px] bg-emerald-950/25 p-1 rounded border border-emerald-900/20 select-all font-semibold mt-1">
+                                            {parsedAnalysis.suggestedLocator || "page.getByRole('button', { name: 'Apply Coupon' })"}
+                                          </code>
+                                        </div>
+                                      </div>
+
+                                      {parsedAnalysis.patchProposal && (
+                                        <div className="bg-black p-3.5 rounded-lg border border-purple-500/25 flex flex-col md:flex-row md:items-center justify-between gap-4 font-mono">
+                                          <div className="space-y-1 flex-1">
+                                            <span className="text-[9px] text-purple-400 font-semibold uppercase tracking-wider block">Patch proposed by AI (Dynamic Healing)</span>
+                                            <div className="text-[11px] text-gray-300 space-y-0.5 mt-1">
+                                              <div>Target Keyword: <code className="text-rose-400 font-bold bg-rose-950/30 px-1 rounded">{parsedAnalysis.patchProposal.targetSelector || 'Apply Coupon button'}</code></div>
+                                              <div>Replacement Selector: <code className="text-emerald-400 font-bold bg-emerald-950/30 px-1 rounded">{parsedAnalysis.patchProposal.replacementSelector || "page.getByRole('button', { name: 'Use Coupon' })"}</code></div>
+                                              <div className="text-[10px] text-gray-400 mt-1 italic">Proposed Gherkin substitution: "{parsedAnalysis.patchProposal.newGherkinLine}"</div>
+                                            </div>
+                                          </div>
+                                          
+                                          <button
+                                            onClick={() => applyAdvisorPatch(runningSession.id, parsedAnalysis.patchProposal)}
+                                            className="bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-mono text-[10px] px-4 py-2 rounded uppercase font-bold tracking-wider inline-flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)] shrink-0 self-end md:self-center"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5 text-purple-200 animate-pulse" />
+                                            Apply Patch proposed by AI
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -968,6 +1094,61 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+
+                {/* agent-browser Explorer Mode Panel */}
+                <div className="border-t border-white/5 pt-4 mt-4 shrink-0 flex flex-col min-h-[220px]">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                    <span className="text-[10px] text-gray-300 font-mono uppercase tracking-wider font-semibold">agent-browser Site Explorer</span>
+                  </div>
+                  <p className="text-[9px] text-gray-500 font-mono mb-2">
+                    Automatically inspect pages using LLMs CDP tunnel. Discover accessible tags, sitemaps & forms of any URL.
+                  </p>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={explorerUrl}
+                      onChange={(e) => setExplorerUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 bg-black border border-white/5 text-[10px] font-mono text-white rounded px-2.5 py-1 focus:outline-none"
+                    />
+                    <button
+                      onClick={exploreTargetSite}
+                      disabled={isExploring}
+                      className="bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-mono text-[9px] px-2.5 py-1 rounded uppercase font-semibold transition-all inline-flex items-center gap-1 shrink-0"
+                    >
+                      {isExploring ? <RefreshCw className="w-3 h-3 animate-spin" /> : 'Explore'}
+                    </button>
+                  </div>
+
+                  {explorerResult ? (
+                    <div className="mt-3 bg-black/50 border border-white/5 rounded p-2.5 space-y-2 text-[9.5px] font-mono overflow-y-auto max-h-44 scrollbar-thin">
+                      <div className="space-y-1">
+                        <span className="text-purple-400 font-semibold block border-b border-white/5 pb-0.5">Discovered Routes (Sitemap):</span>
+                        {explorerResult.routes?.map((r: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-gray-400">
+                            <span>Route: {r.path}</span>
+                            <span className="text-[8px] bg-white/5 text-gray-400 px-1 py-0.2 rounded font-sans uppercase font-bold">{r.type}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="space-y-1 pt-1">
+                        <span className="text-emerald-450 font-semibold block border-b border-white/5 pb-0.5">Accessibility Nodes (A11y Map):</span>
+                        {explorerResult.elements?.map((el: any, idx: number) => (
+                          <div key={idx} className="text-gray-400">
+                            <span className="text-gray-500 font-sans">[{el.role}]</span> {el.name} <code className="text-[8px] text-emerald-400 font-semibold bg-white/2 px-0.5 rounded">{el.selector}</code>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex-1 border border-dashed border-white/5 rounded min-h-[90px] flex items-center justify-center text-[10px] text-gray-650 font-mono select-none">
+                      {isExploring ? 'Tunnelling CDP connection...' : 'CDP Engine Standby'}
+                    </div>
+                  )}
+                </div>
+
               </div>
 
               {/* Code Script Compiler panel */}
@@ -1082,14 +1263,15 @@ export default function App() {
                   {/* script script editor text */}
                   <div className="space-y-1 flex-1 flex flex-col min-h-[160px]">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-gray-500 font-mono block uppercase">Chromium Agent Script Code Block</label>
-                      <span className="text-[9px] text-gray-500 font-mono uppercase bg-emerald-950/20 text-emerald-450 border border-emerald-900/40 px-1 py-0.5 rounded">ESLint Node20</span>
+                      <label className="text-[10px] text-gray-500 font-mono block uppercase">Gherkin Feature Specification Document (Brain Planner Layer 2)</label>
+                      <span className="text-[9px] text-gray-500 font-mono uppercase bg-purple-950/20 text-purple-400 border border-purple-900/40 px-1 py-0.5 rounded">Gherkin Domain DSL</span>
                     </div>
                     <div className="flex-1 bg-black rounded border border-white/5 overflow-hidden flex flex-col">
                       <textarea
                         value={suiteScript}
                         onChange={(e) => setSuiteScript(e.target.value)}
-                        className="flex-1 bg-black text-emerald-400 p-4 font-mono text-[11px] focus:outline-none resize-none leading-relaxed min-h-[220px]"
+                        placeholder={`Feature: Checkout Flow\n  Scenario: promo discount\n    Given user opens "https://store.demo.org/cart"\n    When user clicks the "Add to Cart" button`}
+                        className="flex-1 bg-black text-purple-300 p-4 font-mono text-[11px] focus:outline-none resize-none leading-relaxed min-h-[220px]"
                         style={{ tabSize: 2 }}
                       />
                     </div>
@@ -1110,7 +1292,7 @@ export default function App() {
                           className="bg-purple-600 hover:bg-purple-500 text-white font-mono text-[10px] px-2.5 py-1 rounded transition-all flex items-center gap-1 uppercase font-bold disabled:opacity-50"
                         >
                           {isGeneratingScript ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                          AI Generate Code
+                          Draft Gherkin Spec
                         </button>
                         
                         <button
@@ -1120,7 +1302,7 @@ export default function App() {
                           className="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-2.5 py-1 rounded transition-all flex items-center gap-1 uppercase font-bold disabled:opacity-50"
                         >
                           {isValidatingScript ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
-                          Verify/Audit
+                          Compile Spec
                         </button>
 
                         <button
@@ -1136,7 +1318,7 @@ export default function App() {
                     </div>
 
                     <p className="text-[10px] text-gray-500 leading-normal font-mono">
-                      💡 Provide a descriptive test sequence in the <strong className="text-gray-300">Description Notes</strong> field and input your <strong className="text-gray-300">Target URL</strong>. Click <strong className="text-purple-400">AI Generate</strong> to auto-author your Chrome Agent script, or use <strong className="text-emerald-400">Verify</strong> to analyze selectors.
+                      💡 Write a beautiful Gherkin feature spec list inside the workspace above. Click <strong className="text-emerald-400">Compile Spec</strong> to compile it into Action IR JSON arrays, or select <strong className="text-rose-455">Dry-Run</strong> to simulate interaction frames.
                     </p>
 
                     {/* AI Validation results */}
