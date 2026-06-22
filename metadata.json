@@ -1,0 +1,8 @@
+{
+  "name": "QA Agent Browser Automation",
+  "description": "An advanced, scalable Web App QA automation testing platform with vercel-labs/agent-browser interface, RabbitMQ asynchronous queue monitoring, SQLite storage, and Docker worker isolation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
