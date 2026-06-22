@@ -7,7 +7,10 @@ services:
     build: .
     container_name: qa_automation_agent_web
     ports:
-      - "3000:3000"
+      # Exposes the service. You can change the host port (left-side) to any custom port,
+      # e.g., "8080:3000" or use the APP_PORT environment variable to override it.
+      # To enable remote access, ensure your host firewall allows incoming connections on this port.
+      - "${APP_PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
       - GEMINI_API_KEY=${GEMINI_API_KEY}
